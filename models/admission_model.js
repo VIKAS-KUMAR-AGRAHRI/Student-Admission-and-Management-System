@@ -4,8 +4,8 @@ const Schema = mongoose.Schema;
 // Define the schema for college admission
 const admissionSchema = new Schema({
     user_id:{
-        type: Schema.Types.ObjectId,
-        ref:'user'
+        type:String,
+
     },
     personalInfo: {
         fullName: {
@@ -13,7 +13,7 @@ const admissionSchema = new Schema({
             required: true
         },
         dateOfBirth: {
-            type: Date,
+            type: String,
             required: true
         },
         gender: {

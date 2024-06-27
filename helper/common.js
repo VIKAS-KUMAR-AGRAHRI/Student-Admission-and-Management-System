@@ -43,26 +43,23 @@ module.exports = {
         return password;
     },
     //otp generation code end here.......................................
-    tokengenerate:async(data)=>{
-        try{
-        jwt.sign({ data }, secretKey, { expiresIn: "300s" }, (err, token) => {
-            return res.json({
-              responseCode: 200,
-              responseMessage: "Successfully login",
-              token: token,
+    tokengenerate: async (data) => {
+        console.log("check in tokengenerate");
+        try {
+            return new Promise((resolve, reject) => {
+                jwt.sign({ data }, secretKey, { expiresIn: "300s" }, (err, token) => {
+                    if (err) {
+                        // console.error("Error generating token:", err);
+                        reject(false);
+                    } else {
+                        // console.log("try this", token);
+                        resolve(token);
+                    }
+                });
             });
-          });
-        }catch{
-             //there is some error in generating token ..................................................
-             return res.json({
-                responseCode: 500,
-                responseMessage: "Try again login",
-                responseResult:"Internal Server Error"
-              });
+        } catch (error) {
+            console.error("Error in tokengenerate:", error);
+            return false;
         }
     }
-
-    ,
-
-
 }

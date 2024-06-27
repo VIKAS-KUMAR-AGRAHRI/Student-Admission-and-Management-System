@@ -1,4 +1,3 @@
-const { response } = require('express');
 const helper = require('../helper/common');
 const Admission = require('../models/admission_model');
 const usermodel = require("../models/user_model");
@@ -12,6 +11,7 @@ module.exports = {
             let oneuser = await usermodel.findOne({
                 $or: [{ email: req.body.email }, { mobile: req.body.mobile }]
             });
+            console.log("check 1",oneuser)
             if (!oneuser) {
                 // console.log("login unsuccessfullll...");
                 return res.json({
@@ -19,6 +19,7 @@ module.exports = {
                     responseMessage: "User does not exist",
                 });
             }
+            console.log("check 2")
             if (oneuser.statusCode != "ACTIVE") {
                 return res.json({
                     responseCode: 404,
@@ -29,14 +30,27 @@ module.exports = {
             const passwordMatch = bcrypt.compareSync(req.body.pass, oneuser.pass);
 
             if (passwordMatch) {
+                console.log("check 3")
                 const data = {
                     id: oneuser.id,
                     email: oneuser.email,
                     userType: oneuser.userType,
                 };
                 // console.log("login successfully user", oneuser);
-                const tokenResponse = helper.tokengenerate(data);
-                return tokenResponse;
+                const tokenResponse = await helper.tokengenerate(data);
+                if(tokenResponse==false){
+                    return res.json({
+                        responseCode:500,
+                        responseMessage:"Internal Server Error",
+                        responseResult:"Token not generatd"
+                    })
+                }
+                console.log(tokenResponse,"this is token")
+                return res.json({
+                    responseCode:200,
+                    responseMessage:"Token generated successfully",
+                    Token:tokenResponse
+                })
             } else {
                 return res.json({
                     responseCode: 401,
@@ -55,6 +69,7 @@ module.exports = {
     SignUp: async (req, res) => {
         try {
             console.log(req.body);
+            console.log("check 1")
             //we check that from this mobile or email user exist or not .............
             const query = {
                 $and: [
@@ -62,10 +77,11 @@ module.exports = {
                     { statusCode: { $ne: "DELETE" } },
                 ],
             };
-
+            console.log("check 2")
             const model = await usermodel.findOne(query);
-
+            console.log("check 3",model)
             if (model) {
+                console.log("check 4")
                 if (req.body.email == model.email) {
                     return res.json({
                         responseCode: 404,
@@ -80,12 +96,14 @@ module.exports = {
                 }
             }
             // Generate OTP and hash password
+            console.log("check 4")
             req.body.otp = helper.otpgeneration();
+            console.log(req.body.otp)
             req.body.otpTime = Date.now() + 10 * 60 * 1000; // OTP expires in 10 minutes
             req.body.pass = bcrypt.hashSync(req.body.pass, 10);
 
             // Send OTP mail
-            domail(req.body.email, "Otp verification", `Your otp is ${req.body.otp}`);
+            helper.domail(req.body.email, "Otp verification", `Your otp is ${req.body.otp}`);
 
 
             const save = await usermodel.create(req.body);
@@ -298,6 +316,7 @@ module.exports = {
     },
     admissionForm: async (req, res) => {
         try {
+            console.log("check 1 in admission form")
             const {
                 user_id, fullName, dateOfBirth, gender, nationality, permanentAddress, email, phoneNumber, institutionName, completionYear, grades, examName, score, rank, program, preferredCourse, fatherName, motherName, guardianContactNumber
             } = req.body;
