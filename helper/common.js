@@ -47,7 +47,7 @@ module.exports = {
         console.log("check in tokengenerate");
         try {
             return new Promise((resolve, reject) => {
-                jwt.sign({ data }, secretKey, { expiresIn: "300s" }, (err, token) => {
+                jwt.sign({ data }, secretKey, { expiresIn: "600s" }, (err, token) => {
                     if (err) {
                         // console.error("Error generating token:", err);
                         reject(false);

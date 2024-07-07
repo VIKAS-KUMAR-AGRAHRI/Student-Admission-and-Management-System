@@ -1,55 +1,18 @@
 const bcrypt = require('bcrypt');
 const users = require("../models/user_model");
 const { Student, Faculty } = require('../models/department_model');
-const helper= require('../helper/common');
+const helper = require('../helper/common');
 const Admission = require('../models/admission_model');
 
 module.exports = {
-    login: async (req, res) => {
-        try {
-            const { email, password, } = req.body
-
-            if (!email || !password) {
-                return res.json({ responseCode: 400, responseMessage: "Email and Password are required" })
-            }
-            const foundUser = await users.findOne({ $and: [{ $or: [{ email: email }, { mobile: req.body.mobile }] }, { userType: "ADMIN" }] })
-
-            if (!foundUser) {
-                return res.json({ responseCode: 401, responseMessage: "User not found" })
-            }
-
-            if (foundUser.userType !== "ADMIN") {
-                return res.json({ responseCode: 404, responseMessage: "Unauthorized Access" })
-            }
-
-            const isCorrectPassword = await bcrypt.compare(password, foundUser.pass)
-
-            if (!isCorrectPassword) {
-                return res.json({ responseCode: 401, responseMessage: "password not matched" })
-            }
-            console.log("id of founded user", foundUser._id)
-            const data = {
-                id: foundUser.id,
-                email: foundUser.email,
-                userType: foundUser.userType,
-            };
-            // console.log("login successfully user", oneuser);
-            const tokenResponse = helper.tokengenerate(data);
-            return tokenResponse;
-        }
-        catch (error) {
-            console.error(error)
-            return res.json({ responseCode: 500, responseMessage: "Internal Server Error" })
-        }
-    },
-
-
-    student_By_Department: async (req, res) => {
+      student_By_Department: async (req, res) => {
         // return res.json("ehelloekek");
         try {
-            if (!req.user || !req.user.data.userType == "ADMIN") {
-                return res.status(403).json({ message: 'Unauthorized' });
+            if (!req.userId || !req.userType == "ADMIN") {
+                return res.json({responseCode:400, message: 'Unauthorized' });
             }
+
+            //to do this with the help of select statement of mongo..................
             const students = await Student.find({ department: req.body.department }).populate('user_id', 'firstName lastName email mobile');
 
             return res.json({ responseCode: 200, responseMessage: "All Students are fetched successfully", studentList: students })
@@ -63,53 +26,102 @@ module.exports = {
     faculty_By_Department: async (req, res) => {
         // return res.json("ehelloekek");
         try {
-            if (!req.user || !req.user.data.userType == "ADMIN") {
-                return res.status(403).json({ message: 'Unauthorized' });
+            if (!req.userId || req.userType !== "ADMIN") {
+                return res.json({ responseCode:403,responseMessage: 'Unauthorized' });
             }
 
-            const faculty = await Faculty.find({ department: req.body.department }).populate('user_id', 'firstName lastName email mobile');
+            const page = parseInt(req.query.page) || 1;
+            const department = req.body.department;
+            const limit = 5;
+            const searchQuery = req.query.search;
 
-            return res.json({ responseCode: 200, responseMessage: "All Faculty are fetched successfully", faculty })
-        }
-        catch (error) {
-            console.error(error)
-            res.json({ responseCode: 500, responseMessage: "Error in fetching Users" })
+
+            const skip = (page - 1) * limit;
+
+            const query = { department };
+            if (searchQuery) {
+                query.$or = [
+                    { 'user_id.firstName': { $regex: searchQuery, $options: 'i' } },
+                    { 'user_id.lastName': { $regex: searchQuery, $options: 'i' } }
+                ];
+            }
+
+
+            const facultyQuery = Faculty.find(query)
+                .populate('user_id', 'firstName lastName email mobile')
+                .skip(skip)
+                .limit(limit);
+
+
+            const faculty = await facultyQuery.exec();
+
+            const totalCount = await Faculty.countDocuments(query);
+
+            return res.json({
+                responseCode: 200,
+                responseMessage: "Faculty fetched successfully",
+                faculty: faculty,
+                currentPage: page,
+                totalPages: Math.ceil(totalCount / limit)
+            });
+        } catch (error) {
+            console.error(error);
+            return res.json({ responseCode: 500, responseMessage: "Error in fetching faculty" });
         }
     },
     all_Admission_Request: async (req, res) => {
         try {
-            if (!req.user || req.user.data.userType !== "ADMIN") {
-                return res.status(403).json({ message: 'Unauthorized' });
+            if (!req.userId || req.userType !== "ADMIN") {
+                return res.json({ responseCode: 403, responseMessage: 'Unauthorized' });
             }
+
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 10;
             const skip = (page - 1) * limit;
-    
-            const new_addmission = await Admission.find({ form_status: 'PENDING' })
-                .skip(skip)
-                .limit(limit);
-            const totalAdmissions = await Admission.countDocuments({ form_status: 'PENDING' });
-    
+            const searchQuery = req.query.search;
+
+
+            const query = { form_status: 'PENDING' };
+            if (searchQuery) {
+                query.$or = [
+                    { 'user_id.firstName': { $regex: searchQuery, $options: 'i' } },
+                    { 'user_id.lastName': { $regex: searchQuery, $options: 'i' } }
+                ];
+            }
+
+            const admissionQuery = Admission.find(query).populate('user_id', 'firstName lastName').skip(skip).limit(limit);
+            const admissionRequests = await admissionQuery.exec();
+            const totalAdmissions = await Admission.countDocuments(query);
+
             return res.json({
                 responseCode: 200,
                 responseMessage: "All new admission requests fetched successfully",
-                requestList:new_addmission,
+                requestList: admissionRequests,
                 totalPages: Math.ceil(totalAdmissions / limit),
                 currentPage: page
             });
         } catch (error) {
             console.error(error);
-            res.json({ responseCode: 500, responseMessage: "Error in fetching Users" });
+            return res.status(500).json({ responseCode: 500, responseMessage: "Error in fetching admission requests" });
         }
-    },    
-    approved_Admission_Request:async(req,res)=>{
+    },
+    approved_Admission_Request: async (req, res) => {
         try {
-            if (!req.user || !req.user.data.userType == "ADMIN") {
-                return res.status(403).json({ message: 'Unauthorized' });
+            if (!req.userId || req.userType !== "ADMIN") {
+                return res.json({responseCode:403, responseMessage: 'Unauthorized' });
             }
-            const new_addmission = await Admission.findByIdAndUpdate({user_id:req.body.id,form_status:'PENDING'},{$set:{form_status:'APPROVED'}});
-            if(!new_addmission){
-                return  res.json({ responseCode: 400, responseMessage: "check your given id"})
+            const new_addmission = await Admission.findOneAndUpdate({ _id: req.body.id, form_status: 'PENDING' }, { $set: { form_status: 'APPROVED' } });
+            if (!new_addmission) {
+                return res.json({ responseCode: 400, responseMessage: "check your given id" })
+            }
+            const deparment_find = await Admission.findOne({ _id: req.body.id })
+            //update the student schema and give reference id of whole details
+            const preferredCourse = deparment_find.courseInfo.preferredCourse;
+            // console.log("check3 ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,",preferredCourse)
+            //Here we allot a department and save in student schema
+            const studentDepartmentset = await Student.create({ user_id: req.body.id, department: preferredCourse });
+            if (!studentDepartmentset) {
+                return res.json({ responseCode: 400, responseMessage: "Student not alloted in any deparment" })
             }
             return res.json({ responseCode: 200, responseMessage: "Application approved successfuly", new_addmission })
         }
@@ -120,13 +132,14 @@ module.exports = {
     },
     changeUserStatus: async (req, res) => {
         try {
-            const { id } = req.query;
-            console.log(req.user.data.userType)
-            if (!req.user || req.user.data.userType !== "ADMIN") {
+            //we get user id, that user status we want to change
+            const id = req.body.id;
+            console.log(req.userType)
+            if (!req.userId || req.userType !== "ADMIN") {
                 return res.json({ responseCode: 403, responseMessage: 'Unauthorized, only admin are allowed to update or change the user status' });
             }
 
-            if (!req.body.hasOwnProperty('statusCode')) {
+            if (!req.body.statusCode) {
                 return res.json({ responseCode: 400, responseMessage: 'status not found' });
             }
 
@@ -141,13 +154,15 @@ module.exports = {
                 return res.json({ responseCode: 404, responseMessage: 'User not found' });
             }
 
-            if (foundUser.status === newStatus) {
+            if (foundUser.statusCode === newStatus) {
                 return res.json({ responseCode: 400, responseMessage: 'User already has the requested status' });
             }
 
-            // foundUser.statusCode = newStatus;
-            // await foundUser.save();
-            await users.findByIdAndUpdate({_id:foundUser._id},{$set:{statusCode:newStatus}})
+
+            const check =await users.findByIdAndUpdate({ _id: foundUser._id }, { $set: { statusCode: newStatus } })
+            if (!check){
+                return res.json({ responseCode:400, responseMessage: `User status not updated successfully` });
+            }
             return res.json({ responseCode: 200, responseMessage: `User status updated to ${newStatus}` });
         } catch (error) {
             console.error(error);
@@ -156,18 +171,18 @@ module.exports = {
     },
 
     getUserById: async (req, res) => {
-        const { id } = req.query
+        const id = req.body.id
         try {
 
-            if (!req.user || req.user.data.userType !== "ADMIN") {
+            if (!req.userId || req.userType !== "ADMIN") {
                 return res.json({ responseCode: 403, responseMessage: 'Unauthorized' });
             }
 
-            const user = await users.findOne({ _id: id, statusCode: "ACTIVE" })
+            const user = await users.findOne({ _id: id, userType:{$ne:"ADMIN"}})
             if (!user) {
                 return res.json({ responseCode: 404, responseMessage: "not found" })
             }
-            return res.json({ responseCode: 200, responseMessage: "User data fetched successfully", user })
+            return res.json({ responseCode: 200, responseMessage: "User data fetched successfully", responseResult:user })
         }
         catch (error) {
             return res.json({ responseCode: 500, responseMessage: "Internal Server Error" })
@@ -175,67 +190,61 @@ module.exports = {
     },
 
     createUser: async (req, res) => {
-        const { firstName, lastName, email, phoneNo, isVerified, status, userType } = req.body
+        const { firstName, lastName, email, mobile, countryCode, state, city, statusCode, userType, otpVarify, department } = req.body
 
         try {
-
-            if (!req.user || req.user.data.userType !== "ADMIN") {
+            if (!req.userId || req.userType !== "ADMIN") {
                 return res.json({ responseCode: 403, responseMessage: 'Unauthorized' });
             }
-
-            if (!firstName || !lastName || !email ) {
+            console.log(req.body)
+            if (!firstName || !lastName || !email || !mobile || !userType || otpVarify === undefined || !department) {
                 return res.json({ responseCode: 400, responseMessage: "Please fill the required fields" })
             }
-
-            const existingUser = await users.findOne({ $and: [{ email: email }, { statusCode: "ACTIVE" }] })
+            
+            const existingUser = await users.findOne({ $and: [{$or:[{ email: email },{mobile: mobile}]},{ statusCode: "ACTIVE"}]} )
 
             if (existingUser) {
-                return res.sjson({ responseCode: 400, responseMessage: 'Email already exists' });
+                if (existingUser.email==email) {
+                    return res.json({ responseCode: 400, responseMessage: 'Email already exists' });
+                }
+                
+                return res.json({ responseCode: 400, responseMessage: 'Mobile already exists' });
+                
             }
-            const password=helper.generateRandomPassword();
-            
+            const genpassword = helper.generateRandomPassword();
+            const password = bcrypt.hashSync(genpassword, 10);
+            console.log("new user password is ", genpassword)
             const newUser = new users({
                 firstName: firstName,
                 lastName: lastName,
                 email: email,
-                countryCode: "+91",
-                mobile: phoneNo,
+                mobile: mobile,
+                countryCode: countryCode,
+                state: state,
+                city: city,
                 pass: password,
-                statusCode: status,
+                statusCode: statusCode,
                 userType: userType,
-                otpVarify: isVerified,
+                otpVarify: otpVarify,
             })
             if (newUser.userType == "ADMIN") {
-                return res.json({ responseCode: 403, responseMessage: "You are not authorized to create users with the ADMIN role" })
+                return res.json({ responseCode: 403, responseMessage: "Don't create user as a ADMIN" })
             }
-            helper.domail(req.body.email, "password by college", `Your password is ${req.body.otp} , you can change this password via login in your account`);
-            const savedUser = await newUser.save();
+            helper.domail(req.body.email, "password by college", `Your password is ${genpassword} , you can change this password via login in your account`);
+            const insertUser = await users.create(newUser);
+            if (!insertUser) {
+                return res.json({ responseCode: 400, responseMessage: "There is some problem to creating user" })
+            }
+            const savedUser = await Faculty.create({ user_id: insertUser._id, department: department });
             return res.json({ responseCode: 200, responseMessage: "User created Successfully", savedUser })
         }
         catch (error) {
             console.error(error);
             res.json({ responseCode: 500, responseMessage: 'Internal Server Error' });
         }
-    },
-
-    getAdmin: async (req, res) => {
-
-        try {
-            if (!req.user || req.user.data.userType !== "ADMIN") {
-                return res.json({ responseCode: 403, responseMessage: 'Unauthorized, only admin are allowed to update or change the user status' });
-            }
-
-            const admin = await users.find({ $and: [{ userType: "ADMIN" }, { statusCode: "ACTIVE" }] })
-            return res.json({ responseCode: 200, responseMessage: "Admin fetched successfully", admin })
-        }
-        catch (err) {
-            console.error(err)
-            return res.json({ responseCode: 500, responseMessage: "Internal Server Error" })
-        }
     }
 
 }
-// module.exports=adminController;
 
 
 

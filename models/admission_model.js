@@ -1,11 +1,10 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
-// Define the schema for college admission
 const admissionSchema = new Schema({
-    user_id:{
-        type:String,
-
+    user_id: {
+        type: Schema.Types.ObjectId,
+        ref: 'user',
     },
     personalInfo: {
         fullName: {
@@ -75,7 +74,7 @@ const admissionSchema = new Schema({
         preferredCourse: {
             type: String,
             required: true,
-            enum: ['CSE', 'MECH', 'EC', 'CL'] 
+            enum: ['CSE', 'MECH', 'EC', 'CL']
         }
     },
     guardianInfo: {
@@ -96,10 +95,10 @@ const admissionSchema = new Schema({
         type: Date,
         default: Date.now
     },
-    form_status:{
-        type:String,
-        enum:['APPROVED','PENDING'],
-        default:'PENDING'
+    form_status: {
+        type: String,
+        enum: ['APPROVED', 'PENDING'],
+        default: 'PENDING'
     }
 });
 
